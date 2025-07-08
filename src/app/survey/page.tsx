@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { saveSurveyResult, SurveyResult } from "@/lib/storage";
 
 interface Question {
@@ -144,7 +144,6 @@ export default function SurveyPage() {
     DIMENSIONS.map(d => d.questions.map(() => d.questions[0].type === 'multiple' ? [] : 0))
   );
   const [submitted, setSubmitted] = useState(false);
-  const router = useRouter();
 
   const handleSingleChange = (dimIdx: number, qIdx: number, value: number) => {
     setAnswers(prev => {
@@ -277,12 +276,12 @@ export default function SurveyPage() {
           >
             提交评估
           </button>
-          <a
+          <Link
             href="/"
             className="inline-block bg-gray-500 text-white px-8 py-3 rounded-lg hover:bg-gray-600 transition-colors font-medium text-lg"
           >
             返回主页
-          </a>
+          </Link>
         </div>
       </form>
 
@@ -304,12 +303,12 @@ export default function SurveyPage() {
             <p>加权总分：{totalScore.toFixed(1)} / {maxPossibleScore.toFixed(1)}</p>
             <p className="text-sm text-gray-500 mt-2">（仅供参考，具体以企业实际情况为准）</p>
             <div className="mt-4 text-center">
-              <a
+              <Link
                 href="/"
                 className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
                 返回主页查看完整结果
-              </a>
+              </Link>
             </div>
           </div>
         </div>

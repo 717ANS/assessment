@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { saveSurveyResult, SurveyResult } from "@/lib/storage";
 
 interface Question {
@@ -144,7 +144,6 @@ export default function GlobalizationSurveyPage() {
     GLOBALIZATION_DIMENSIONS.map(d => d.questions.map(() => d.questions[0].type === 'multiple' ? [] : 0))
   );
   const [submitted, setSubmitted] = useState(false);
-  const router = useRouter();
 
   const handleSingleChange = (dimIdx: number, qIdx: number, value: number) => {
     setAnswers(prev => {
@@ -287,12 +286,12 @@ export default function GlobalizationSurveyPage() {
           >
             提交评估
           </button>
-          <a
+          <Link
             href="/"
             className="inline-block bg-gray-500 text-white px-8 py-3 rounded-lg hover:bg-gray-600 transition-colors font-medium text-lg"
           >
             返回主页
-          </a>
+          </Link>
         </div>
       </form>
 
@@ -318,12 +317,12 @@ export default function GlobalizationSurveyPage() {
             <h4 className="font-semibold mb-2">发展建议：</h4>
             <p className="text-sm">{getRecommendations()}</p>
             <div className="mt-4 text-center">
-              <a
+              <Link
                 href="/"
                 className="inline-block bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium"
               >
                 返回主页查看完整结果
-              </a>
+              </Link>
             </div>
           </div>
         </div>

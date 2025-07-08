@@ -243,12 +243,8 @@ export default function Home() {
                     重新评估
                   </button>
                   <button
-                    onClick={() => {
-                      const results = getSurveyResults();
-                      const businessResult = results.find(r => r.type === 'business');
-                      const globalizationResult = results.find(r => r.type === 'globalization');
-                      
-                      let message = `基于您的${result.type === 'business' ? '业务能力' : '出海能力'}评估结果（得分率：${Math.round(result.percentage)}%，等级：${result.maturity}），我为您提供以下分析：\n\n`;
+                                       onClick={() => {
+                     let message = `基于您的${result.type === 'business' ? '业务能力' : '出海能力'}评估结果（得分率：${Math.round(result.percentage)}%，等级：${result.maturity}），我为您提供以下分析：\n\n`;
                       
                       if (result.type === 'business') {
                         message += `**业务能力成熟度分析：**\n`;
