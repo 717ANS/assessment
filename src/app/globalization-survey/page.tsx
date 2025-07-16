@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { saveSurveyResult, SurveyResult } from "@/lib/storage";
+import { useRouter } from "next/navigation";
 
 interface Question {
   text: string;
@@ -144,6 +145,7 @@ export default function GlobalizationSurveyPage() {
     GLOBALIZATION_DIMENSIONS.map(d => d.questions.map(() => d.questions[0].type === 'multiple' ? [] : 0))
   );
   const [submitted, setSubmitted] = useState(false);
+  const router = useRouter();
 
   const handleSingleChange = (dimIdx: number, qIdx: number, value: number) => {
     setAnswers(prev => {
@@ -181,6 +183,8 @@ export default function GlobalizationSurveyPage() {
     };
     
     saveSurveyResult(result);
+    // 跳转到结果页
+    router.push("/globalization-survey/result");
   };
 
   const calculateScore = () => {
@@ -230,15 +234,19 @@ export default function GlobalizationSurveyPage() {
       
       <form onSubmit={handleSubmit} className="space-y-8">
         {GLOBALIZATION_DIMENSIONS.map((dim, dimIdx) => (
-          <div key={dim.name} className="border rounded-lg p-6 bg-white shadow-sm">
-            <h2 className="text-xl font-semibold mb-4 text-green-800">{dim.name}</h2>
+          <div key={dim.name} className="border rounded-lg p-6 bg-white shadow-sm mb-8">
+            <h2 className="text-xl font-semibold mb-4 text-blue-800">
+              {dim.name}
+              <span className="text-xs text-gray-400 ml-2">(权重 {dim.weight})</span>
+            </h2>
             {dim.questions.map((question, qIdx) => (
-              <div key={`${dimIdx}-${qIdx}`} className="mb-6 p-4 border-l-4 border-green-200 bg-gray-50">
-                <label className="block mb-3 font-medium text-gray-800">
+              <div key={`${dimIdx}-${qIdx}`} className="mb-4 p-4 border-l-4 border-blue-200 bg-gray-50">
+                <label className="block mb-2 font-medium text-gray-800">
                   {question.text}
                   <span className="text-sm text-gray-500 ml-2">
                     {question.type === 'multiple' ? '(可多选)' : '(单选)'}
                   </span>
+                  <span className="ml-2 text-xs text-gray-400">权重 {question.weight}</span>
                 </label>
                 
                 {question.type === 'single' ? (

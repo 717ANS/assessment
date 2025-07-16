@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Section {
+  id        Int         @id @default(autoincrement())
+  name      String
+  weight    Float
+  subSections SubSection[]
+}
+
+model SubSection {
+  id        Int         @id @default(autoincrement())
+  name      String
+  weight    Float
+  section   Section     @relation(fields: [sectionId], references: [id])
+  sectionId Int
+  questions Question[]
+}
+
+model Question {
+  id          Int      @id @default(autoincrement())
+  text        String
+  type        QuestionType
+  options     String?  // JSON字符串，单选/多选题用
+  weight      Float
+  subSection  SubSection @relation(fields: [subSectionId], references: [id])
+  subSectionId Int
+}
+
+enum QuestionType {
+  single
+  multiple
+  text
+} 
