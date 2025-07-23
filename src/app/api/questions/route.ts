@@ -1,41 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { promises as fs } from 'fs';
+import path from 'path';
 
 export async function GET(request: NextRequest) {
   try {
-    const sections = await prisma.section.findMany({
-      include: {
-        subSections: {
-          include: {
-            questions: true
-          }
-        }
-      }
-    });
-
-    // 格式化options为数组
-    const formatted = sections.map(section => ({
-      id: section.id,
-      name: section.name,
-      weight: section.weight,
-      subSections: section.subSections.map(sub => ({
-        id: sub.id,
-        name: sub.name,
-        weight: sub.weight,
-        questions: sub.questions.map(q => ({
-          id: q.id,
-          text: q.text,
-          type: q.type,
-          options: q.options ? JSON.parse(q.options) : undefined,
-          weight: q.weight
-        }))
-      }))
-    }));
-
-    return NextResponse.json({ sections: formatted });
+    const dataDir = path.join(process.cwd(), 'src', 'data');
+    const [dimensionRaw, finalRaw, questionnaireRaw] = await Promise.all([
+      fs.readFile(path.join(dataDir, 'dimension.json'), 'utf-8'),
+      fs.readFile(path.join(dataDir, 'final.json'), 'utf-8'),
+      fs.readFile(path.join(dataDir, 'questionnaire.json'), 'utf-8'),
+    ]);
+    const dimensions = JSON.parse(dimensionRaw);
+    const final = JSON.parse(finalRaw);
+    const questionnaire = JSON.parse(questionnaireRaw);
+    return NextResponse.json({ dimensions, final, questionnaire });
   } catch (error) {
-    return NextResponse.json({ error: '获取题库失败', detail: String(error) }, { status: 500 });
+    return NextResponse.json({ error: '读取题库数据失败', detail: String(error) }, { status: 500 });
   }
 } 

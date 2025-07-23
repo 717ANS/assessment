@@ -10,14 +10,18 @@ interface SectionScore {
 
 export default function RadarChart({ data }: { data: SectionScore[] }) {
   const indicator = data.map(item => ({ name: item.name, max: 1 }));
-  const actual = data.map(item => item.actual);
-  const recommend = data.map(item => item.recommend);
+  const actual = data.map(item => item.actual.toFixed(2));
+  const recommend = data.map(item => item.recommend.toFixed(2));
 
   const option = {
+    backgroundColor: '#949494',
     tooltip: {},
     legend: {
       data: ["实际指数", "推荐指数"],
-      top: 0
+      top: 0,
+      textStyle: {
+        color: '#333'
+      }
     },
     radar: {
       indicator,
@@ -26,6 +30,22 @@ export default function RadarChart({ data }: { data: SectionScore[] }) {
       axisName: {
         color: '#333',
         fontSize: 14
+      },
+      splitArea: {
+        show: true,
+        areaStyle: {
+          color: ['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.1)']
+        }
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#999'
+        }
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#999'
+        }
       }
     },
     series: [
@@ -34,20 +54,20 @@ export default function RadarChart({ data }: { data: SectionScore[] }) {
         type: "radar",
         data: [
           {
-            value: actual,
-            name: "实际指数",
-            areaStyle: { color: "rgba(59,130,246,0.2)" },
-            lineStyle: { color: "#2563eb" },
-            symbol: "circle",
-            itemStyle: { color: "#2563eb" }
-          },
-          {
             value: recommend,
             name: "推荐指数",
-            areaStyle: { color: "rgba(16,185,129,0.1)" },
-            lineStyle: { color: "#10b981" },
+            areaStyle: { color: "rgba(61, 93, 111, 0.2)" },
+            lineStyle: { color: "#3D5D6F" },
             symbol: "circle",
-            itemStyle: { color: "#10b981" }
+            itemStyle: { color: "#3D5D6F" }
+          },
+          {
+            value: actual,
+            name: "实际指数",
+            areaStyle: { color: "rgba(204,31,32,0.2)" },
+            lineStyle: { color: "#CC1F20" },
+            symbol: "circle",
+            itemStyle: { color: "#CC1F20" }
           }
         ]
       }
