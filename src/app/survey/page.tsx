@@ -1,35 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { saveSurveyResult, SurveyResult } from "@/lib/storage";
 import { useRouter } from "next/navigation";
 
-interface Question {
-  id: number;
-  text: string;
-  type: 'single' | 'multiple' | 'text';
-  options?: string[];
-  weight: number;
-}
-
-interface SubSection {
-  id: number;
-  name: string;
-  weight: number;
-  questions: Question[];
-}
-
-interface Section {
-  id: number;
-  name: string;
-  weight: number;
-  subSections: SubSection[];
-}
-
 export default function SurveyPage() {
-  const [sections, setSections] = useState<Section[]>([]);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [questionnaire, setQuestionnaire] = useState<any[]>([]);
+  const [dimensions, setDimensions] = useState<any[]>([]);
+  const [final, setFinal] = useState<any>({});
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -37,173 +15,193 @@ export default function SurveyPage() {
     fetch("/api/questions")
       .then(res => res.json())
       .then(data => {
-        setSections(data.sections);
+        setQuestionnaire(data.questionnaire);
+        setDimensions(data.dimensions);
+        setFinal(data.final);
         setLoading(false);
       });
   }, []);
 
-  // 生成唯一key
-  const getKey = (sectionId: number, subId: number, qId: number) => `${sectionId}_${subId}_${qId}`;
-
-  const handleChange = (key: string, value: any) => {
-    setAnswers(prev => ({ ...prev, [key]: value }));
-  };
-
-  const handleMultiChange = (key: string, value: string) => {
-    setAnswers(prev => {
-      const arr = Array.isArray(prev[key]) ? prev[key] : [];
-      return {
-        ...prev,
-        [key]: arr.includes(value) ? arr.filter((v: string) => v !== value) : [...arr, value]
-      };
-    });
+  const handleChange = (dimName: string, qKey: string, value: string) => {
+    setAnswers(prev => ({ ...prev, [`${dimName}_${qKey}`]: value }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    // 计算分数
-    let totalScore = 0;
-    let maxScore = 0;
-    // 构造 answersMatrix: (number | number[])[][]
-    const answersMatrix: (number | number[])[][] = sections.map(section =>
-      section.subSections.map(sub =>
-        sub.questions.map(q => {
-          const key = getKey(section.id, sub.id, q.id);
-          if (q.type === 'single') {
-            return Number(answers[key] || 0);
-          } else if (q.type === 'multiple') {
-            return Array.isArray(answers[key]) ? answers[key].map((v: string) => v) : [];
-          } else {
-            return answers[key] || '';
-          }
-        })
-      )
-    );
-    sections.forEach(section => {
-      section.subSections.forEach(sub => {
-        sub.questions.forEach(q => {
-          const key = getKey(section.id, sub.id, q.id);
-          if (q.type === 'single') {
-            const score = Number(answers[key] || 0);
-            totalScore += score * q.weight * section.weight * sub.weight;
-            maxScore += 5 * q.weight * section.weight * sub.weight;
-          } else if (q.type === 'multiple') {
-            const arr = Array.isArray(answers[key]) ? answers[key] : [];
-            totalScore += arr.length * q.weight * section.weight * sub.weight;
-            maxScore += (q.options?.length || 0) * q.weight * section.weight * sub.weight;
-          } else if (q.type === 'text') {
-            // 填空题不计分
-          }
+    // 计算每个维度分数
+    const dimResults: any[] = [];
+    Object.entries(questionnaire).forEach(([dimName, dimObj]: any) => {
+      let total = 0, weightSum = 0;
+      Object.entries(dimObj)
+        .filter(([k]) => k.startsWith('Q'))
+        .forEach(([qKey, q]: any) => {
+          const v = Number(answers[`${dimName}_${qKey}`] || 0);
+          total += v * (q.weight || 1);
+          weightSum += (q.weight || 1);
         });
+      const avg = weightSum > 0 ? total / weightSum : 0;
+      const level = Math.floor(avg);
+      // 查找建议
+      // 维度建议查找可根据 dimName 匹配 dimensions
+      let advice = "暂无建议";
+      const dimModel = dimensions && (Array.isArray(dimensions) ? dimensions.find((d: any) => d.name === dimName) : dimensions[dimName]);
+      if (dimModel && dimModel.levels && dimModel.levels[`L${level}`]) {
+        advice = dimModel.levels[`L${level}`].advice || dimModel.levels[`L${level}`].desc || "暂无建议";
+      }
+      dimResults.push({
+        id: dimName,
+        name: dimName,
+        score: avg,
+        level,
+        advice
       });
     });
-    const percentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
-    const maturity = percentage > 80 ? "高" : percentage > 60 ? "中" : "低";
-    const result: SurveyResult = {
-      type: 'business',
-      answers: answersMatrix,
-      score: totalScore,
-      maxScore,
-      percentage,
-      maturity,
+    // 计算综合能力
+    let total = 0, weightSum = 0;
+    Object.entries(questionnaire).forEach(([dimName, dimObj]: any) => {
+      Object.entries(dimObj)
+        .filter(([k]) => k.startsWith('Q'))
+        .forEach(([qKey, q]: any) => {
+          const v = Number(answers[`${dimName}_${qKey}`] || 0);
+          total += v * (q.weight || 1) * (Number(dimObj.weight) || 1);
+          weightSum += (q.weight || 1) * (Number(dimObj.weight) || 1);
+        });
+    });
+    const avg = weightSum > 0 ? total / weightSum : 0;
+    const level = Math.floor(avg);
+    const finalAdvice = final.levels && final.levels[`L${level}`] ? final.levels[`L${level}`].advice || final.levels[`L${level}`].desc || "暂无建议" : "暂无建议";
+    // 保存到本地
+    const result = {
+      dimResults,
+      overall: {
+        score: avg,
+        level,
+        advice: finalAdvice
+      },
+      answers,
       timestamp: Date.now()
     };
-    saveSurveyResult(result);
+    localStorage.setItem("survey_result", JSON.stringify(result));
     router.push("/survey/result");
   };
 
   if (loading) {
-    return <div className="text-center py-20 text-gray-500">正在加载题库...</div>;
+    return (
+      <div className="min-h-screen bg-perficient-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-perficient-red mb-4"></div>
+          <p className="text-light-gray text-lg">正在加载问卷...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-10 px-4">
-      <h1 className="text-3xl font-bold mb-4 text-center">制造业企业业务能力成熟度问卷</h1>
-      <p className="mb-8 text-gray-600 text-center">本问卷用于评估企业在战略、运营、市场、技术、组织等方面的成熟度。请根据实际情况选择最符合的选项。</p>
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {sections.map(section => (
-          <div key={section.id} className="border rounded-lg p-6 bg-white shadow-sm mb-8">
-            <h2 className="text-xl font-semibold mb-4 text-blue-800">{section.name} <span className="text-xs text-gray-400 ml-2">(权重 {section.weight})</span></h2>
-            {section.subSections.map(sub => (
-              <div key={sub.id} className="mb-6">
-                <h3 className="font-semibold mb-2 text-blue-600">{sub.name} <span className="text-xs text-gray-400">(权重 {sub.weight})</span></h3>
-                {sub.questions.map(q => {
-                  const key = getKey(section.id, sub.id, q.id);
-                  return (
-                    <div key={q.id} className="mb-4 p-4 border-l-4 border-blue-200 bg-gray-50">
-                      <label className="block mb-2 font-medium text-gray-800">
-                        {q.text}
-                        <span className="text-sm text-gray-500 ml-2">
-                          {q.type === 'multiple' ? '(可多选)' : q.type === 'single' ? '(单选)' : '(填空)'}
-                        </span>
-                        <span className="ml-2 text-xs text-gray-400">权重 {q.weight}</span>
-                      </label>
-                      {q.type === 'single' && q.options && (
-                        <div className="space-y-2">
-                          {q.options.map((option, idx) => (
-                            <label key={idx} className="flex items-center gap-3 p-2 hover:bg-blue-50 rounded cursor-pointer">
-                              <input
-                                type="radio"
-                                name={key}
-                                value={idx + 1}
-                                checked={answers[key] === String(idx + 1) || answers[key] === idx + 1}
-                                onChange={() => handleChange(key, idx + 1)}
-                                required
-                                className="text-blue-600"
-                              />
-                              <span className="text-sm">{option}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                      {q.type === 'multiple' && q.options && (
-                        <div className="space-y-2">
-                          {q.options.map((option, idx) => (
-                            <label key={idx} className="flex items-center gap-3 p-2 hover:bg-green-50 rounded cursor-pointer">
-                              <input
-                                type="checkbox"
-                                value={option}
-                                checked={Array.isArray(answers[key]) && answers[key].includes(option)}
-                                onChange={() => handleMultiChange(key, option)}
-                                className="text-green-600"
-                              />
-                              <span className="text-sm">{option}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                      {q.type === 'text' && (
-                        <textarea
-                          className="w-full border rounded p-2 mt-1"
-                          rows={2}
-                          value={answers[key] || ''}
-                          onChange={e => handleChange(key, e.target.value)}
-                          placeholder="请输入您的答案..."
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+    <div className="min-h-screen bg-perficient-black">
+      {/* 顶部导航栏 */}
+      <nav className="w-full fixed top-0 left-0 z-50 bg-gray-1 shadow-lg border-b border-gray-2">
+        <div className="max-w-6xl mx-auto flex items-center justify-between h-16 px-6">
+          <a href="/" className="text-2xl font-bold text-perficient-red">能力成熟度评估</a>
+          <div className="flex space-x-8 items-center">
+            <a href="/" className="text-perficient-white hover:text-perficient-red font-medium transition-colors">首页</a>
+            <a href="/survey" className="text-perficient-red font-medium">能力评估</a>
+            <a href="/survey/result" className="text-perficient-white hover:text-perficient-red font-medium transition-colors">评估结果</a>
           </div>
-        ))}
-        <div className="text-center space-x-4">
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium text-lg"
-          >
-            提交评估
-          </button>
-          <Link
-            href="/"
-            className="inline-block bg-gray-500 text-white px-8 py-3 rounded-lg hover:bg-gray-600 transition-colors font-medium text-lg"
-          >
-            返回主页
-          </Link>
         </div>
-      </form>
+      </nav>
+
+      <div className="max-w-6xl mx-auto pt-20 px-6 pb-12">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-perficient-white mb-4">制造业企业能力成熟度问卷</h1>
+          <p className="text-light-gray text-lg">请根据您的实际情况，选择最符合的选项</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {Object.entries(questionnaire).map(([dimName, dimObj]: any, idx: number) => (
+            <div key={dimName} className="card-dark p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-perficient-white">
+                  {dimName}
+                </h2>
+                <span className="bg-perficient-red text-perficient-white px-3 py-1 rounded-full text-sm font-medium">
+                  权重 {dimObj.weight}
+                </span>
+              </div>
+              
+              {Object.entries(dimObj)
+                .filter(([k]) => k.startsWith('Q'))
+                .map(([qKey, q]: any, qIdx: number) => (
+                  <div key={qKey} className="mb-8 p-6 border-l-4 border-perficient-red bg-gray-2 rounded-r-lg">
+                    <div className="flex items-start justify-between mb-4">
+                      <label className="block font-semibold text-perficient-white text-lg leading-relaxed">
+                        {q.question}
+                      </label>
+                      <span className="bg-perficient-gold text-perficient-white px-2 py-1 rounded text-xs font-medium ml-4 flex-shrink-0">
+                        权重 {q.weight}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {q.option && q.option.map((opt: any, idx: number) => {
+                        const level = Object.keys(opt)[0];
+                        const label = opt[level];
+                        const isSelected = answers[`${dimName}_${qKey}`] === level;
+                        return (
+                          <label 
+                            key={level} 
+                            className={`flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+                              isSelected 
+                                ? 'border-perficient-red bg-gray-1' 
+                                : 'border-gray-3 hover:border-perficient-gold hover:bg-gray-2'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`${dimName}_${qKey}`}
+                              value={level}
+                              checked={isSelected}
+                              onChange={() => handleChange(dimName, qKey, level)}
+                              required
+                              className="sr-only"
+                            />
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mr-4 ${
+                              isSelected 
+                                ? 'border-perficient-red' 
+                                : 'border-medium-gray'
+                            }`}>
+                              {isSelected && (
+                                <div className="w-3 h-3 bg-perficient-red rounded-full"></div>
+                              )}
+                            </div>
+                            <span className={`font-medium ${
+                              isSelected ? 'text-perficient-red' : 'text-light-gray'
+                            }`}>
+                              {label}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ))}
+          
+          <div className="text-center space-x-6 pt-8">
+            <button
+              type="submit"
+              className="btn-skew"
+            >
+              <span>提交评估</span>
+            </button>
+            <Link href="/">
+              <button type="button" className="btn-skew">
+                <span>返回主页</span>
+              </button>
+            </Link>
+          </div>
+        </form>
+      </div>
     </div>
   );
-} 
+}
