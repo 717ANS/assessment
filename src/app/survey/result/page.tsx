@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 
 export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolean } = {}) {
   const [result, setResult] = useState<any>(null);
@@ -9,24 +10,79 @@ export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolea
   const [dimensions, setDimensions] = useState<any[]>([]);
   const [final, setFinal] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const [enterprise, setEnterprise] = useState<any>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    const local = localStorage.getItem("survey_result");
-    if (!local) {
-      router.replace("/survey");
-      return;
+    const id = searchParams.get("id");
+    if (id) {
+      // 从数据库读取
+      fetch(`/api/admin/enterprise?id=${id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0 && data[0].result) {
+            setResult(data[0].result);
+            setEnterprise(data[0]);
+          } else if (data && data.result) {
+            setResult(data.result);
+            setEnterprise(data);
+          } else {
+            setResult(null);
+            setEnterprise(null);
+          }
+          fetch("/api/questions")
+            .then(res => res.json())
+            .then(data => {
+              setQuestionnaire(data.questionnaire);
+              setDimensions(data.dimensions);
+              setFinal(data.final);
+              setLoading(false);
+            });
+        });
+    } else {
+      // 回退本地
+      const local = localStorage.getItem("survey_result");
+      if (!local) {
+        router.replace("/survey");
+        return;
+      }
+      setResult(JSON.parse(local));
+      // 新增：尝试从本地获取最近一次企业名
+      try {
+        const ents = localStorage.getItem("enterprise_latest");
+        if (ents) {
+          setEnterprise(JSON.parse(ents));
+        } else {
+          setEnterprise(null);
+        }
+      } catch {
+        setEnterprise(null);
+      }
+      fetch("/api/questions")
+        .then(res => res.json())
+        .then(data => {
+          setQuestionnaire(data.questionnaire);
+          setDimensions(data.dimensions);
+          setFinal(data.final);
+          setLoading(false);
+        });
     }
-    setResult(JSON.parse(local));
-    fetch("/api/questions")
-      .then(res => res.json())
-      .then(data => {
-        setQuestionnaire(data.questionnaire);
-        setDimensions(data.dimensions);
-        setFinal(data.final);
-        setLoading(false);
+  }, [router, searchParams]);
+
+  // 兼容新旧格式，统一answers为对象
+  const answersObj = useMemo(() => {
+    if (!result) return {};
+    if (Array.isArray(result.answers)) {
+      // 新格式
+      const obj: Record<string, string> = {};
+      result.answers.forEach((a: any) => {
+        obj[`${a.dim}_${a.qKey}`] = a.value;
       });
-  }, [router]);
+      return obj;
+    }
+    return result.answers || {};
+  }, [result]);
 
   // 重新计算分数
   const levelScore: Record<string, number> = { L1: 1, L2: 2, L3: 3, L4: 4, L5: 5 };
@@ -40,7 +96,7 @@ export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolea
       Object.entries(dimObj)
         .filter(([k]) => k.startsWith('Q'))
         .forEach(([qKey, q]: any) => {
-          const answerLevel = result.answers[`${dimName}_${qKey}`];
+          const answerLevel = answersObj[`${dimName}_${qKey}`];
           const score = levelScore[answerLevel] || 0;
           const qWeight = Number(q.weight) || 1;
           total += score * qWeight;
@@ -76,7 +132,7 @@ export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolea
       });
     });
     return arr;
-  }, [questionnaire, result, dimensions]);
+  }, [questionnaire, result, dimensions, answersObj]);
 
   const RadarChart = dynamic(() => import("@/components/RadarChart"), { ssr: false });
 
@@ -87,7 +143,7 @@ export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolea
     Object.entries(dimObj)
       .filter(([k]) => k.startsWith('Q'))
       .forEach(([qKey, q]: any) => {
-        const answerLevel = result.answers[`${dimName}_${qKey}`];
+        const answerLevel = answersObj[`${dimName}_${qKey}`];
         const score = levelScore[answerLevel] || 0;
         const qWeight = Number(q.weight) || 1;
         const dimWeight = Number(dimObj.weight) || 1;
@@ -99,11 +155,11 @@ export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolea
   const overallLevel = Math.floor(overallScore);
   
   // 更新result.overall并保存到localStorage
-  if (result && (result.overall.score !== overallScore || result.overall.level !== overallLevel)) {
+  if (result && (!result.overall || result.overall.score !== overallScore || result.overall.level !== overallLevel)) {
     const updatedResult = {
       ...result,
       overall: {
-        ...result.overall,
+        ...(result.overall || {}),
         score: overallScore,
         level: overallLevel
       }
@@ -166,6 +222,10 @@ export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolea
       </nav>
 
       <div className="max-w-6xl mx-auto pt-20 px-6 pb-12">
+        {/* 公司名称问候语 */}
+        {enterprise?.name && (
+          <div className="mb-6 text-2xl font-bold text-perficient-gold text-center">您好，{enterprise.name}</div>
+        )}
         {/* 左上角返回按钮 */}
         <div className="mb-6">
           <a href="/">
@@ -247,23 +307,29 @@ export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolea
                 </tr>
               </thead>
               <tbody>
-                {dimResults.map((d: any, i: number) => (
-                  <tr key={d.id || i} className={d.level < 3 ? "bg-red-900/20" : ""}>
-                    <td className="border border-gray-3 px-4 py-3 font-semibold text-perficient-white">{d.name}</td>
-                    <td className="border border-gray-3 px-4 py-3 text-center text-perficient-red font-semibold">{d.score.toFixed(2)}</td>
-                    <td className="border border-gray-3 px-4 py-3 text-center">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        d.level >= 4 ? 'bg-green-900/30 text-green-300' :
-                        d.level >= 3 ? 'bg-blue-900/30 text-blue-300' :
-                        'bg-red-900/30 text-red-300'
-                      }`}>
-                        {d.adviceObj?.等级 || `L${d.level}`}
-                      </span>
-                    </td>
-                    <td className="border border-gray-3 px-4 py-3 text-light-gray">{d.adviceObj?.定义 || "-"}</td>
-                    <td className="border border-gray-3 px-4 py-3 text-light-gray" dangerouslySetInnerHTML={{__html: d.adviceObj?.策略与方案 || "-"}} />
-                  </tr>
-                ))}
+                {dimResults.map((d: any, i: number) => {
+                  // 从 dimension 表获取定义和策略与方案
+                  const dim = dimensions[d.name] || {};
+                  const def = dim[`definition_L${d.level}`] || "-";
+                  const strat = dim[`strategy_and_plan_L${d.level}`] || "-";
+                  return (
+                    <tr key={d.id || i} className={d.level < 3 ? "bg-red-900/20" : ""}>
+                      <td className="border border-gray-3 px-4 py-3 font-semibold text-perficient-white">{d.name}</td>
+                      <td className="border border-gray-3 px-4 py-3 text-center text-perficient-gold font-semibold">{d.score.toFixed(2)}</td>
+                      <td className="border border-gray-3 px-4 py-3 text-center">
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          d.level >= 4 ? 'bg-green-900/30 text-green-300' :
+                          d.level >= 3 ? 'bg-blue-900/30 text-blue-300' :
+                          'bg-red-900/30 text-red-300'
+                        }`}>
+                          {`L${d.level}`}
+                        </span>
+                      </td>
+                      <td className="border border-gray-3 px-4 py-3 text-light-gray">{def}</td>
+                      <td className="border border-gray-3 px-4 py-3 text-light-gray" dangerouslySetInnerHTML={{__html: strat}} />
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -271,7 +337,7 @@ export default function SurveyResultPage({ onlySummary }: { onlySummary?: boolea
         
         {/* 缺陷项 */}
         <div className="mb-10 card-dark p-8">
-          <h2 className="text-2xl font-bold mb-6 text-red-400">缺陷项（等级低于L3）</h2>
+          <h2 className="text-2xl font-bold mb-6 text-red-400">重点关注项（等级低于L3）</h2>
           {dimResults.filter((d: any) => d.level < 3).length === 0 ? (
             <div className="text-green-400 text-lg font-medium">暂无明显缺陷，整体表现良好！</div>
           ) : (

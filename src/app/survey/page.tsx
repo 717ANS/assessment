@@ -9,6 +9,8 @@ export default function SurveyPage() {
   const [final, setFinal] = useState<any>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [enterpriseName, setEnterpriseName] = useState("");
+  const [enterpriseInfo, setEnterpriseInfo] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -26,63 +28,35 @@ export default function SurveyPage() {
     setAnswers(prev => ({ ...prev, [`${dimName}_${qKey}`]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // 计算每个维度分数
-    const dimResults: any[] = [];
-    Object.entries(questionnaire).forEach(([dimName, dimObj]: any) => {
-      let total = 0, weightSum = 0;
-      Object.entries(dimObj)
-        .filter(([k]) => k.startsWith('Q'))
-        .forEach(([qKey, q]: any) => {
-          const v = Number(answers[`${dimName}_${qKey}`] || 0);
-          total += v * (q.weight || 1);
-          weightSum += (q.weight || 1);
-        });
-      const avg = weightSum > 0 ? total / weightSum : 0;
-      const level = Math.floor(avg);
-      // 查找建议
-      // 维度建议查找可根据 dimName 匹配 dimensions
-      let advice = "暂无建议";
-      const dimModel = dimensions && (Array.isArray(dimensions) ? dimensions.find((d: any) => d.name === dimName) : dimensions[dimName]);
-      if (dimModel && dimModel.levels && dimModel.levels[`L${level}`]) {
-        advice = dimModel.levels[`L${level}`].advice || dimModel.levels[`L${level}`].desc || "暂无建议";
-      }
-      dimResults.push({
-        id: dimName,
-        name: dimName,
-        score: avg,
-        level,
-        advice
-      });
-    });
-    // 计算综合能力
-    let total = 0, weightSum = 0;
+    // 仅记录题目序号和选项
+    const answerArr: { dim: string, qKey: string, value: string }[] = [];
     Object.entries(questionnaire).forEach(([dimName, dimObj]: any) => {
       Object.entries(dimObj)
         .filter(([k]) => k.startsWith('Q'))
         .forEach(([qKey, q]: any) => {
-          const v = Number(answers[`${dimName}_${qKey}`] || 0);
-          total += v * (q.weight || 1) * (Number(dimObj.weight) || 1);
-          weightSum += (q.weight || 1) * (Number(dimObj.weight) || 1);
+          if (answers[`${dimName}_${qKey}`]) {
+            answerArr.push({ dim: dimName, qKey, value: answers[`${dimName}_${qKey}`] });
+          }
         });
     });
-    const avg = weightSum > 0 ? total / weightSum : 0;
-    const level = Math.floor(avg);
-    const finalAdvice = final.levels && final.levels[`L${level}`] ? final.levels[`L${level}`].advice || final.levels[`L${level}`].desc || "暂无建议" : "暂无建议";
-    // 保存到本地
     const result = {
-      dimResults,
-      overall: {
-        score: avg,
-        level,
-        advice: finalAdvice
-      },
-      answers,
+      answers: answerArr,
       timestamp: Date.now()
     };
-    localStorage.setItem("survey_result", JSON.stringify(result));
-    router.push("/survey/result");
+    const infoObj = { remark: enterpriseInfo };
+    // 新增：本地保存企业名
+    localStorage.setItem("enterprise_latest", JSON.stringify({ name: enterpriseName }));
+    const res = await fetch("/api/admin/enterprise", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: enterpriseName, info: infoObj, result }),
+    });
+    const data = await res.json();
+    if (data.success !== false) {
+      router.push(`/survey/result?id=${data.id || ''}`);
+    }
   };
 
   if (loading) {
@@ -117,15 +91,36 @@ export default function SurveyPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {/* 企业信息输入 */}
+          <div className="card-dark p-8 mb-8">
+            <h2 className="text-xl font-bold text-perficient-white mb-4">企业信息</h2>
+            <div className="mb-4">
+              <label className="block text-light-gray mb-1">企业名称 <span className="text-perficient-red">*</span></label>
+              <input
+                type="text"
+                className="px-3 py-2 rounded w-full text-black"
+                value={enterpriseName}
+                onChange={e => setEnterpriseName(e.target.value)}
+                required
+                placeholder="请输入企业名称"
+              />
+            </div>
+            <div>
+              <label className="block text-light-gray mb-1">企业备注信息</label>
+              <textarea
+                className="px-3 py-2 rounded w-full text-black min-h-[60px]"
+                value={enterpriseInfo}
+                onChange={e => setEnterpriseInfo(e.target.value)}
+                placeholder="可填写企业简介、行业、规模等信息"
+              />
+            </div>
+          </div>
           {Object.entries(questionnaire).map(([dimName, dimObj]: any, idx: number) => (
             <div key={dimName} className="card-dark p-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-perficient-white">
                   {dimName}
                 </h2>
-                <span className="bg-perficient-red text-perficient-white px-3 py-1 rounded-full text-sm font-medium">
-                  权重 {dimObj.weight}
-                </span>
               </div>
               
               {Object.entries(dimObj)
@@ -136,9 +131,6 @@ export default function SurveyPage() {
                       <label className="block font-semibold text-perficient-white text-lg leading-relaxed">
                         {q.question}
                       </label>
-                      <span className="bg-perficient-gold text-perficient-white px-2 py-1 rounded text-xs font-medium ml-4 flex-shrink-0">
-                        权重 {q.weight}
-                      </span>
                     </div>
                     
                     <div className="space-y-3">

@@ -90,10 +90,9 @@ export default function Home() {
                     <h4 className="text-lg font-bold text-perficient-white">{dimName}</h4>
                     <div className="w-2 h-2 bg-perficient-red rounded-full"></div>
                   </div>
-                  <div className="mb-3 text-light-gray text-sm leading-relaxed">{dim.description}</div>
                   <div className="pt-3 border-t border-gray-3">
                     <span className="font-semibold text-perficient-gold text-sm">核心能力：</span>
-                    <span className="text-light-gray text-sm ml-1">{dim["核心能力"]}</span>
+                    <span className="text-light-gray text-sm ml-1">{dim["核心能力"] || dim.core_capability}</span>
                   </div>
                 </div>
               ))}
