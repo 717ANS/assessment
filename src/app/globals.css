@@ -47,7 +47,7 @@ a {
 .btn-skew span {
   display: inline-block;
   transform: skew(15deg);
-}
+  }
 
 /* 卡片样式 */
 .card-dark {
